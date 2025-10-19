@@ -9,7 +9,8 @@
   outputs = inputs@{ self, flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "aarch64-darwin" "x86_64-darwin" ];
-      perSystem = { config, self', inputs', pkgs, system, ... }: {
+      perSystem = { config, self', inputs', pkgs, system, lib, ... }: 
+      {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             bash
@@ -19,27 +20,15 @@
             jq
           ];
         };
-        packages.default = pkgs.stdenv.mkDerivation {
-          pname = "mac-app-util";
-          version = "2025-10-19";
-          src = ./.;
-          buildInputs = with pkgs; [
-            bash
+        packages.default = pkgs.writeShellApplication {
+          name = "mac-app-util";
+          text = builtins.readFile ./main.bash;
+          runtimeInputs = with pkgs; [
             dockutil
             rsync
             findutils
             jq
           ];
-
-          installPhase = ''
-            mkdir -p $out/bin
-            cp main.bash $out/bin/mac-app-util
-            chmod +x $out/bin/mac-app-util
-          '';
-
-          postPatch = ''
-            patchShebangs $out/bin/mac-app-util
-          '';
         };
       };
       flake = {

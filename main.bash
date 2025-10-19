@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-
+# AI convert from https://github.com/hraban/mac-app-util/blob/master/main.lisp
 set -euo pipefail
 
 DRY_RUN=${DRY_RUN:-}
