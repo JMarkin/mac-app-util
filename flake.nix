@@ -10,9 +10,13 @@
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "aarch64-darwin" "x86_64-darwin" ];
       perSystem = { config, self', inputs', pkgs, system, ... }: {
-        devShells.default = {
-          packages = [
-            pkgs.mac-app-util
+        devShells.default = pkgs.mkShell {
+          packages = with pkgs; [
+            bash
+            dockutil
+            rsync
+            findutils
+            jq
           ];
         };
         packages.default = pkgs.stdenv.mkDerivation {
