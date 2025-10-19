@@ -1,170 +1,100 @@
-# Copyright © 2023–2025  Hraban Luyat
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, version 3 of the License.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 {
+  description = "Description for the project";
+
   inputs = {
-    # This has SBCL 2.4.10 and docktuil 3.1.3 which are known to work
-    nixpkgs.url = "github:NixOS/nixpkgs/af51545ec9a44eadf3fe3547610a5cdd882bc34e";
-    cl-nix-lite.url = "github:hraban/cl-nix-lite";
-    flake-compat = {
-      # Use my own fixed-output-derivation branch because I don’t want users to
-      # need to eval-time download dependencies.
-      url = "github:hraban/flake-compat/fixed-output";
-      flake = false;
-    };
-    systems.url = "github:nix-systems/default-darwin";
-    flake-utils = {
-      url = "flake-utils";
-      inputs.systems.follows = "systems";
-    };
-    treefmt-nix.url = "github:numtide/treefmt-nix";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs =
-    {
-      self,
-      nixpkgs,
-      flake-utils,
-      cl-nix-lite,
-      treefmt-nix,
-      ...
-    }:
-    {
-      homeManagerModules.default =
-        {
-          pkgs,
-          lib,
-          config,
-          ...
-        }:
-        {
-          options = with lib; {
-            targets.darwin.mac-app-util.enable = mkOption {
-              type = types.bool;
-              default = builtins.hasAttr pkgs.stdenv.system self.packages;
-              example = true;
-              description = "Whether to enable mac-app-util home manager integration";
+  outputs = inputs@{ self, flake-parts, ... }:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = [ "aarch64-darwin" "x86_64-darwin" ];
+      perSystem = { config, self', inputs', pkgs, system, ... }: {
+        devShells.default = {
+          packages = [
+            pkgs.mac-app-util
+          ];
+        };
+        packages.default = pkgs.stdenv.mkDerivation {
+          pname = "mac-app-util";
+          version = "2025-10-19";
+          src = ./.;
+          buildInputs = with pkgs; [
+            bash
+            dockutil
+            rsync
+            findutils
+            jq
+          ];
+
+          installPhase = ''
+            mkdir -p $out/bin
+            cp main.bash $out/bin/mac-app-util
+            chmod +x $out/bin/mac-app-util
+          '';
+
+          postPatch = ''
+            patchShebangs $out/bin/mac-app-util
+          '';
+        };
+      };
+      flake = {
+        homeManagerModules.default =
+          { pkgs
+          , lib
+          , config
+          , ...
+          }:
+          {
+            options = with lib; {
+              targets.darwin.mac-app-util.enable = mkOption {
+                type = types.bool;
+                default = builtins.hasAttr pkgs.stdenv.system self.packages;
+                example = true;
+                description = "Whether to enable mac-app-util home manager integration";
+              };
+            };
+            config = lib.mkIf config.targets.darwin.mac-app-util.enable {
+              home.activation = {
+                trampolineApps =
+                  let
+                    mac-app-util = self.packages.${pkgs.stdenv.system}.default;
+                  in
+                  lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+                    fromDir="$HOME/Applications/Home Manager Apps"
+                    toDir="$HOME/Applications/Home Manager Trampolines"
+                    ${mac-app-util}/bin/mac-app-util sync-trampolines "$fromDir" "$toDir"
+                  '';
+              };
             };
           };
-          config = lib.mkIf config.targets.darwin.mac-app-util.enable {
-            home.activation = {
-              trampolineApps =
+        darwinModules.default =
+          { config
+          , pkgs
+          , lib
+          , ...
+          }:
+          {
+            options = {
+              # Technically this isn’t a “service” but this seems like the most
+              # polite place to put this?
+              services.mac-app-util.enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                example = false;
+              };
+            };
+            config = lib.mkIf config.services.mac-app-util.enable {
+              system.activationScripts.postActivation.text =
                 let
                   mac-app-util = self.packages.${pkgs.stdenv.system}.default;
                 in
-                lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-                  fromDir="$HOME/Applications/Home Manager Apps"
-                  toDir="$HOME/Applications/Home Manager Trampolines"
-                  ${mac-app-util}/bin/mac-app-util sync-trampolines "$fromDir" "$toDir"
+                ''
+                  ${mac-app-util}/bin/mac-app-util sync-trampolines "/Applications/Nix Apps" "/Applications/Nix Trampolines"
                 '';
             };
           };
-        };
-      darwinModules.default =
-        {
-          config,
-          pkgs,
-          lib,
-          ...
-        }:
-        {
-          options = {
-            # Technically this isn’t a “service” but this seems like the most
-            # polite place to put this?
-            services.mac-app-util.enable = lib.mkOption {
-              type = lib.types.bool;
-              default = true;
-              example = false;
-            };
-          };
-          config = lib.mkIf config.services.mac-app-util.enable {
-            system.activationScripts.postActivation.text =
-              let
-                mac-app-util = self.packages.${pkgs.stdenv.system}.default;
-              in
-              ''
-                ${mac-app-util}/bin/mac-app-util sync-trampolines "/Applications/Nix Apps" "/Applications/Nix Trampolines"
-              '';
-          };
-        };
-    }
-    // (
-      with flake-utils.lib;
-      eachDefaultSystem (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system}.extend cl-nix-lite.overlays.default;
-          treefmt =
-            { ... }:
-            {
-              projectRootFile = "flake.nix";
-              programs.nixfmt = {
-                enable = true;
-                strict = true;
-              };
-            };
-          treefmtPkg = treefmt-nix.lib.evalModule pkgs treefmt;
-        in
-        {
-          checks = {
-            default = self.packages.${system}.default;
-            treefmt = treefmtPkg.config.build.check self;
-          };
-          packages = {
-            default = pkgs.callPackage (
-              {
-                lispPackagesLite,
-                dockutil,
-                findutils,
-                jq,
-                rsync,
-              }:
-              with lispPackagesLite;
-              lispScript rec {
-                name = "mac-app-util";
-                src = ./main.lisp;
-                dependencies = [
-                  alexandria
-                  inferior-shell
-                  cl-interpol
-                  cl-json
-                  str
-                  trivia
-                ];
-                nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
-                postInstall = ''
-                  wrapProgramBinary "$out/bin/${name}" \
-                    --suffix PATH : "${
-                      with pkgs;
-                      lib.makeBinPath [
-                        dockutil
-                        rsync
-                        findutils
-                        jq
-                      ]
-                    }"
-                '';
-                installCheckPhase = ''
-                  $out/bin/${name} --help
-                '';
-                doInstallCheck = true;
-                meta.license = pkgs.lib.licenses.agpl3Only;
-              }
-            ) { };
-          };
-          formatter = treefmtPkg.config.build.wrapper;
-        }
-      )
-    );
+
+      };
+    };
 }

@@ -1,4 +1,7 @@
-* (Nix) Utilities for Mac App launchers
+* (Nix) Utilities for Mac App launchers -- Fork BASH ONLY (ORIGINAL)[https://github.com/hraban/mac-app-util]
+
+** CURRENTLY No default.nix
+
 
 This is a [[https://nixos.org][Nix]] module for Macintosh computers (“darwin”) which fixes a few common problems encountered by users of Nix on Macs:
 
