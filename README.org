@@ -1,5 +1,4 @@
-* (Nix) Utilities for Mac App launchers -- Fork BASH ONLY (ORIGINAL)[https://github.com/hraban/mac-app-util]
-
+* (Nix) Utilities for Mac App launchers -- Fork BASH ONLY -- ORIGINAL https://github.com/hraban/mac-app-util
 ** CURRENTLY No default.nix
 
 
