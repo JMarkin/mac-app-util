@@ -6,7 +6,6 @@ DEBUGSH=${DEBUGSH:-}
 
 PLUTIL="/usr/bin/plutil"
 OSACOMPILE="/usr/bin/osacompile"
-DOCKUTIL="dockutil"
 
 copyable_app_props=(
   "CFBundleDevelopmentRegion"
@@ -44,13 +43,13 @@ debug_run() {
   if [[ -n $DRY_RUN ]]; then
     echo "(dry-run) $*"
   else
-    eval "$@"
+    "$@"
   fi
 }
 
 in_temp_dir() {
   dir=$(mktemp -d)
-  trap "rm -rf '$dir'" EXIT
+  trap 'rm -rf "${dir}"' EXIT
   pushd "$dir" > /dev/null
   "$@"
   popd > /dev/null
@@ -74,6 +73,8 @@ copy_paths() {
   # Build jq filter from keys
   local keys_json
   keys_json=$(printf '%s\n' "${copyable_app_props[@]}" | jq -R . | jq -s .)
+  local jq_filter
+  jq_filter="to_entries | map(select(.key as \$k | ${keys_json} | index(\$k) != null)) | from_entries"
 
   in_temp_dir bash -c "
     set -eu
@@ -82,7 +83,6 @@ copy_paths() {
     $PLUTIL -convert json -- orig
     $PLUTIL -convert json -- bare-wrapper
 
-    jq_filter='to_entries | map(select(.key as \$k | ${keys_json} | index(\$k) != null)) | from_entries'
 
     jq --argjson keys '$keys_json' \"$jq_filter\" < orig > filtered
 
@@ -214,7 +214,8 @@ sync_trampolines() {
   # Gather .app recursively 1 level deep
   mapfile -t apps < <(find "$from" -maxdepth 2 -name '*.app' -type d)
   for app in "${apps[@]}"; do
-    local trampoline_target="$to/$(basename "$app")"
+    local trampoline_target
+    trampoline_target="$to/$(basename "$app")"
     mktrampoline "$app" "$trampoline_target"
   done
 
@@ -229,7 +230,7 @@ Usage:
   mac-app-util sync-dock Foo.app Bar.app ...
   mac-app-util sync-trampolines /my/nix/Applications /Applications/MyTrampolines/
 
-mktrampoline creates a “trampoline” application launcher that immediately
+mktrampoline creates a \“trampoline\” application launcher that immediately
 launches another application.
 
 sync-dock updates persistent items in your dock if any of the given apps has the

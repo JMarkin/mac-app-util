@@ -18,6 +18,7 @@
             rsync
             findutils
             jq
+            shellcheck
           ];
         };
         packages.default = pkgs.writeShellApplication {
